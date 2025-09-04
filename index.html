@@ -1,0 +1,1086 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Habit Tracker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
+
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=Inter:wght@400;500;600&display=swap');
+        
+        :root {
+            --bg-color: #f4f1e9;
+            --card-color: #fcfbf8;
+            --text-color: #4a4a4a;
+            --accent-color: #b8860b;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            overflow-x: hidden;
+        }
+
+        .heading {
+            font-family: 'Playfair Display', serif;
+            color: #3b3b3b;
+        }
+
+        .card {
+            background-color: var(--card-color);
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            transition: transform 0.2s, box-shadow 0.2s;
+            border: 2px solid #ddd;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
+        }
+        
+        .hero-card {
+            background-color: var(--card-color);
+            border-radius: 0.75rem;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+            border: 3px solid #b8860b;
+            position: relative;
+            padding: 2.5rem;
+            background: linear-gradient(145deg, #fefdfb, #f5f2eb);
+        }
+
+        .hero-card::before {
+            content: '';
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            right: 10px;
+            bottom: 10px;
+            border: 1px solid #d4c794;
+            pointer-events: none;
+        }
+
+        .habits-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .btn {
+            padding: 0.75rem 2rem;
+            border-radius: 9999px;
+            font-weight: 600;
+            text-align: center;
+            transition: all 0.3s ease;
+            background-color: #8c734b;
+            color: white;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            border: 1px solid #6b5536;
+        }
+
+        .btn:hover {
+            background-color: #6b5536;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+        }
+        
+        .back-btn {
+            background-color: transparent;
+            color: var(--text-color);
+            border: 1px solid #ced4da;
+            padding: 0.75rem 1.5rem;
+            box-shadow: none;
+        }
+        
+        .back-btn:hover {
+            background-color: #e9ecef;
+            transform: translateY(-2px);
+            box-shadow: none;
+        }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 50;
+        }
+
+        .modal-content {
+            background-color: var(--card-color);
+            padding: 2.5rem;
+            border-radius: 1rem;
+            text-align: left;
+            width: 90%;
+            max-width: 650px;
+            overflow-y: auto;
+            max-height: 90vh;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.1);
+        }
+
+        .input-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .input-group label {
+            font-weight: 600;
+            display: block;
+            margin-bottom: 0.5rem;
+            color: var(--text-color);
+        }
+
+        .input-group input, .input-group textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border-radius: 0.5rem;
+            border: 1px solid #ced4da;
+            background-color: #f8f9fa;
+            color: var(--text-color);
+            transition: all 0.3s ease;
+        }
+        .input-group input:focus, .input-group textarea:focus {
+            outline: none;
+            border-color: #b8860b;
+            box-shadow: 0 0 0 3px rgba(184, 134, 11, 0.2);
+        }
+
+        /* Animation */
+        @keyframes fadeInSlideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        .animate-card {
+            opacity: 0;
+            animation: fadeInSlideUp 0.8s ease-out forwards;
+        }
+        .animate-card:nth-child(1) { animation-delay: 0.1s; }
+        .animate-card:nth-child(2) { animation-delay: 0.2s; }
+        .animate-card:nth-child(3) { animation-delay: 0.3s; }
+        .animate-card:nth-child(4) { animation-delay: 0.4s; }
+        .animate-card:nth-child(5) { animation-delay: 0.5s; }
+        .animate-card:nth-child(6) { animation-delay: 0.6s; }
+        .animate-card:nth-child(7) { animation-delay: 0.7s; }
+        .animate-card:nth-child(8) { animation-delay: 0.8s; }
+    </style>
+</head>
+<body class="p-8 md:p-12">
+    <div id="login-view" class="container mx-auto max-w-xl text-center flex flex-col items-center justify-center min-h-screen">
+        <div class="card p-10 w-full">
+            <h1 class="heading text-4xl md:text-5xl font-bold mb-6">Welcome to Habit Tracker</h1>
+            <p class="text-xl text-gray-600 mb-8">Start your journey to better habits today.</p>
+            <div class="input-group">
+                <input id="login-email" type="email" placeholder="Email" class="w-full p-3 rounded-md border border-gray-300">
+            </div>
+            <div class="input-group">
+                <input id="login-password" type="password" placeholder="Password" class="w-full p-3 rounded-md border border-gray-300">
+            </div>
+            <button id="login-btn" class="btn w-full mb-4">Sign In</button>
+            <button id="go-to-register-btn" class="btn back-btn w-full">Need an account? Sign Up</button>
+            <p id="login-error" class="text-red-500 mt-4 hidden"></p>
+        </div>
+    </div>
+
+    <div id="register-view" class="container mx-auto max-w-xl text-center flex flex-col items-center justify-center min-h-screen hidden">
+        <div class="card p-10 w-full">
+            <h1 class="heading text-4xl md:text-5xl font-bold mb-6">Create an Account</h1>
+            <p class="text-lg text-gray-600 mb-8">It's quick and easy.</p>
+            <div class="input-group">
+                <input id="register-email" type="email" placeholder="Email" class="w-full p-3 rounded-md border border-gray-300">
+            </div>
+            <div class="input-group">
+                <input id="register-password" type="password" placeholder="Password" class="w-full p-3 rounded-md border border-gray-300">
+            </div>
+            <button id="register-btn" class="btn w-full mb-4">Sign Up</button>
+            <button id="go-to-login-btn" class="btn back-btn w-full">Already have an account? Sign In</button>
+            <p id="register-error" class="text-red-500 mt-4 hidden"></p>
+        </div>
+    </div>
+
+    <div id="home-view" class="container mx-auto max-w-4xl hidden">
+        <div class="flex justify-between items-center mb-12">
+            <h1 class="heading text-4xl md:text-5xl font-bold tracking-tight">Personal Habit Tracker</h1>
+            <button id="signout-btn" class="btn back-btn">Sign Out</button>
+        </div>
+        
+        <div class="flex justify-center gap-4 mb-8">
+            <button id="show-settings-btn" class="back-btn btn">Edit My Habits & Photo</button>
+            <button id="show-diary-btn" class="back-btn btn">Goal Diary</button>
+        </div>
+
+        <div class="hero-card p-8 mb-12 text-center animate-card">
+            <div class="flex flex-col items-center">
+                <img id="my-photo" src="https://placehold.co/150x150/e9ecef/495057?text=My+Photo" alt="My Photo" class="rounded-full w-40 h-40 mb-6 border-4 border-gray-200 shadow-md">
+                <h2 id="motivation-line" class="heading text-xl md:text-2xl font-bold text-gray-700"></h2>
+            </div>
+        </div>
+
+        <div class="habits-container">
+            <div class="card p-6 cursor-pointer animate-card" data-habit="food">
+                <h3 class="heading text-xl font-semibold">Food Habits</h3>
+                <p class="mt-2 text-gray-500">Track your meals and diet goals.</p>
+            </div>
+            <div class="card p-6 cursor-pointer animate-card" data-habit="physical">
+                <h3 class="heading text-xl font-semibold">Physical Activities</h3>
+                <p class="mt-2 text-gray-500">Log your workouts and exercise.</p>
+            </div>
+            <div class="card p-6 cursor-pointer animate-card" data-habit="selfcare">
+                <h3 class="heading text-xl font-semibold">Self-Care</h3>
+                <p class="mt-2 text-gray-500">Remember to take care of yourself.</p>
+            </div>
+            <div class="card p-6 cursor-pointer animate-card" data-habit="hygiene">
+                <h3 class="heading text-xl font-semibold">Hygiene Activities</h3>
+                <p class="mt-2 text-gray-500">Maintain a healthy routine.</p>
+            </div>
+            <div class="card p-6 cursor-pointer animate-card" data-habit="sleep">
+                <h3 class="heading text-xl font-semibold">Sleep Tracker</h3>
+                <p class="mt-2 text-gray-500">Record your sleep hours.</p>
+            </div>
+            <div class="card p-6 cursor-pointer animate-card" data-habit="water">
+                <h3 class="heading text-xl font-semibold">Water Intake</h3>
+                <p class="mt-2 text-gray-500">Stay hydrated throughout the day.</p>
+            </div>
+        </div>
+
+        <div class="text-center mt-12 animate-card" style="animation-delay: 0.9s;">
+            <button id="show-summary-btn" class="btn">See Your Overall Results</button>
+        </div>
+    </div>
+
+    <div id="detail-view" class="container mx-auto max-w-3xl hidden">
+        <button id="back-to-home" class="btn back-btn mb-8">← Back to Habits</button>
+        <h1 id="habit-title" class="heading text-3xl font-bold text-gray-800 mb-6 tracking-tight"></h1>
+        <div id="sub-habits-list" class="flex flex-col gap-4">
+            </div>
+        <div class="mt-8 flex justify-end">
+            <button id="finish-habit-btn" class="btn">Finish This Habit</button>
+        </div>
+        <div id="habit-history-container" class="mt-8 hidden">
+            <h2 class="text-2xl font-bold mb-4">Your Progress Over Time</h2>
+            <div class="card p-6">
+                <canvas id="habit-history-chart"></canvas>
+            </div>
+        </div>
+    </div>
+
+    <div id="summary-view" class="container mx-auto max-w-4xl hidden">
+        <button id="back-from-summary" class="btn back-btn mb-8">← Back to Habits</button>
+        <h1 class="heading text-4xl font-bold text-gray-800 text-center mb-10 tracking-tight">Your Overall Performance</h1>
+        <div class="card p-8 mb-6">
+            <canvas id="habit-chart"></canvas>
+        </div>
+        <div id="historical-charts" class="grid grid-cols-1 md:grid-cols-2 gap-6 mt-8">
+            <div class="card p-6">
+                <h2 class="text-xl font-bold text-center mb-4">Weekly Performance</h2>
+                <canvas id="weekly-chart"></canvas>
+            </div>
+            <div class="card p-6">
+                <h2 class="text-xl font-bold text-center mb-4">Monthly Performance</h2>
+                <canvas id="monthly-chart"></canvas>
+            </div>
+        </div>
+        
+        <div class="card p-6 mt-8">
+            <h2 class="text-xl font-bold text-center mb-4">AI Prediction for Next Week</h2>
+            <div id="prediction-result" class="text-center text-lg">
+                <p class="text-gray-500">Not enough data to make a prediction. Track your habits for a few weeks to see a forecast here!</p>
+            </div>
+        </div>
+        
+        <div class="card p-6 mt-8">
+            <h2 class="text-xl font-bold text-center mb-4">AI-Powered Insights</h2>
+            <div id="ai-insights-result" class="text-center text-sm text-gray-500">
+                <p>Analyzing habit dependencies...</p>
+            </div>
+        </div>
+
+        <div id="summary-results" class="card p-6 text-center mb-8 mt-6">
+            </div>
+        <div id="summary-feedback" class="text-2xl font-semibold text-center mt-6">
+            </div>
+    </div>
+    
+    <div id="diary-view" class="container mx-auto max-w-3xl hidden">
+        <button id="back-from-diary" class="btn back-btn mb-8">← Back to Habits</button>
+        <h1 class="heading text-3xl font-bold text-gray-800 mb-6 tracking-tight">Goal Diary</h1>
+        <div class="card p-6">
+            <h2 class="text-xl font-bold mb-4">Today's Entry</h2>
+            <p id="current-date" class="text-gray-500 text-sm mb-4"></p>
+            <textarea id="diary-entry-input" class="w-full p-4 h-40 border rounded-md focus:ring-blue-500 focus:border-blue-500 transition-colors" placeholder="Write about your day, your goals, and your progress..."></textarea>
+            <button id="save-diary-entry" class="btn mt-4">Save Entry</button>
+        </div>
+        
+        <div class="mt-8">
+            <h2 class="text-xl font-bold mb-4">Past Entries</h2>
+            <div id="diary-entries-list" class="flex flex-col gap-4">
+                </div>
+        </div>
+    </div>
+
+    <div id="feedback-modal" class="modal-overlay hidden">
+        <div class="modal-content text-center">
+            <h2 id="modal-title" class="text-2xl font-bold mb-4"></h2>
+            <p id="modal-message" class="text-lg text-gray-600 mb-6"></p>
+            <button id="modal-close" class="btn">OK</button>
+        </div>
+    </div>
+    
+    <div id="settings-modal" class="modal-overlay hidden">
+        <div class="modal-content">
+            <h2 class="heading text-3xl font-bold mb-6 text-center">Customize Your Tracker</h2>
+            <div class="input-group">
+                <label for="photo-url">Photo URL:</label>
+                <input type="text" id="photo-url" placeholder="Paste image URL here">
+            </div>
+            <div class="input-group">
+                <label for="motivation-input">Motivation Line:</label>
+                <input type="text" id="motivation-input" placeholder="e.g., 'Your only limit is you.'">
+            </div>
+            <hr class="my-6 border-gray-300">
+            <h3 class="text-2xl font-bold mb-4">Edit Habit Sub-tasks (One per line)</h3>
+            <div class="input-group">
+                <label for="food-habits">Food Habits:</label>
+                <textarea id="food-habits" rows="4"></textarea>
+            </div>
+            <div class="input-group">
+                <label for="physical-habits">Physical Activities:</label>
+                <textarea id="physical-habits" rows="4"></textarea>
+            </div>
+            <div class="input-group">
+                <label for="selfcare-habits">Self-Care:</label>
+                <textarea id="selfcare-habits" rows="4"></textarea>
+            </div>
+            <div class="input-group">
+                <label for="hygiene-habits">Hygiene Activities:</label>
+                <textarea id="hygiene-habits" rows="4"></textarea>
+            </div>
+            <div class="input-group">
+                <label for="sleep-habits">Sleep Tracker:</label>
+                <textarea id="sleep-habits" rows="4"></textarea>
+            </div>
+            <div class="input-group">
+                <label for="water-habits">Water Intake:</label>
+                <textarea id="water-habits" rows="4"></textarea>
+            </div>
+            <div class="mt-6 flex justify-end gap-4">
+                <button id="save-settings-btn" class="btn">Save Changes</button>
+                <button id="close-settings-btn" class="btn back-btn">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 💡 NEW: Firebase configuration
+        const firebaseConfig = {
+            apiKey: "AIzaSyCn79kCYZrMtP2S8LZwgJ9mYcLDkZ55rWo", 
+            authDomain: "habit-tracker-3cd09.firebaseapp.com",
+            projectId: "habit-tracker-3cd09",
+            storageBucket: "habit-tracker-3cd09.appspot.com",
+            messagingSenderId: "367332219464",
+            appId: "1:367332219464:web:1755298957439web:3ef57219ecc3e8eaf4a",
+            measurementId: "G-G6E32D9N8J"
+        };
+        firebase.initializeApp(firebaseConfig);
+        const auth = firebase.auth();
+
+        // 💡 NEW: UI elements for auth views
+        const loginView = document.getElementById('login-view');
+        const registerView = document.getElementById('register-view');
+        const loginEmailInput = document.getElementById('login-email');
+        const loginPasswordInput = document.getElementById('login-password');
+        const registerEmailInput = document.getElementById('register-email');
+        const registerPasswordInput = document.getElementById('register-password');
+        const loginErrorEl = document.getElementById('login-error');
+        const registerErrorEl = document.getElementById('register-error');
+
+        // Existing UI elements
+        const homeView = document.getElementById('home-view');
+        const detailView = document.getElementById('detail-view');
+        const summaryView = document.getElementById('summary-view');
+        const diaryView = document.getElementById('diary-view');
+        const feedbackModal = document.getElementById('feedback-modal');
+        const modalTitle = document.getElementById('modal-title');
+        const modalMessage = document.getElementById('modal-message');
+        const settingsModal = document.getElementById('settings-modal');
+        let habitChart = null;
+        let weeklyChart = null;
+        let monthlyChart = null;
+        let habitHistoryChart = null;
+
+        const motivatingLines = [
+            "Your only limit is you.",
+            "Small steps every day lead to big results.",
+            "Discipline is the bridge between goals and accomplishment.",
+            "The secret of getting ahead is getting started.",
+            "Don't wait for motivation. Be the motivation."
+        ];
+
+        let habits = {};
+        const defaultHabits = {
+            'photoUrl': 'https://placehold.co/150x150/e9ecef/495057?text=My+Photo',
+            'food': {
+                title: 'Food Habits',
+                subHabits: ['Ate a healthy breakfast', 'Avoided sugary drinks', 'Drank at least 2 liters of water', 'Finished all vegetables', 'Had a fruit for a snack'],
+                completed: new Array(5).fill(false),
+                progressHistory: []
+            },
+            'physical': {
+                title: 'Physical Activities',
+                subHabits: ['Worked out for 30 minutes', 'Walked at least 5,000 steps', 'Did 15 minutes of stretching', 'Went for a run', 'Did yoga'],
+                completed: new Array(5).fill(false),
+                progressHistory: []
+            },
+            'selfcare': {
+                title: 'Self-Care',
+                subHabits: ['Read for 20 minutes', 'Meditated for 10 minutes', 'Took a relaxing bath', 'Listened to music', 'Wrote in a journal'],
+                completed: new Array(5).fill(false),
+                progressHistory: []
+            },
+            'hygiene': {
+                title: 'Hygiene Activities',
+                subHabits: ['Brushed and flossed', 'Took a shower', 'Washed face', 'Used hand sanitizer', 'Moisturized'],
+                completed: new Array(5).fill(false),
+                progressHistory: []
+            },
+            'sleep': {
+                title: 'Sleep Tracker',
+                subHabits: ['Slept 8 hours', 'Woke up before 8 AM', 'No screen time 1 hour before bed'],
+                completed: new Array(3).fill(false),
+                progressHistory: []
+            },
+            'water': {
+                title: 'Water Intake',
+                subHabits: ['Drank 8 glasses of water', 'Used a reusable water bottle', 'Finished a large bottle'],
+                completed: new Array(3).fill(false),
+                progressHistory: []
+            },
+            'weeklyPerformance': [],
+            'monthlyPerformance': [],
+            'diaryEntries': []
+        };
+        
+        const loadHabits = (uid) => {
+            try {
+                const savedHabits = localStorage.getItem(`customHabitTrackerData_${uid}`);
+                if (savedHabits) {
+                    const loadedData = JSON.parse(savedHabits);
+                    Object.keys(defaultHabits).forEach(key => {
+                        if (!loadedData[key]) {
+                            loadedData[key] = defaultHabits[key];
+                        }
+                        if (key !== 'photoUrl' && key !== 'motivationLine' && !loadedData[key].progressHistory) {
+                            loadedData[key].progressHistory = defaultHabits[key].progressHistory;
+                        }
+                    });
+                    habits = loadedData;
+                } else {
+                    habits = defaultHabits;
+                    saveHabits(uid);
+                }
+            } catch (e) {
+                console.error("Failed to load from localStorage:", e);
+                habits = defaultHabits;
+            }
+        };
+
+        const saveHabits = (uid) => {
+            try {
+                localStorage.setItem(`customHabitTrackerData_${uid}`, JSON.stringify(habits));
+            } catch (e) {
+                console.error("Failed to save to localStorage:", e);
+            }
+        };
+
+        const updateUIFromHabits = () => {
+            document.getElementById('my-photo').src = habits.photoUrl;
+            document.getElementById('motivation-line').textContent = habits.motivationLine || motivatingLines[Math.floor(Math.random() * motivatingLines.length)];
+        };
+
+        const navigateTo = (view) => {
+            loginView.classList.add('hidden');
+            registerView.classList.add('hidden');
+            homeView.classList.add('hidden');
+            detailView.classList.add('hidden');
+            summaryView.classList.add('hidden');
+            diaryView.classList.add('hidden');
+            document.getElementById(view).classList.remove('hidden');
+        };
+
+        const renderHabitHistoryGraph = (habitId) => {
+            const history = habits[habitId].progressHistory;
+            const historyContainer = document.getElementById('habit-history-container');
+            if (history.length === 0) {
+                historyContainer.classList.add('hidden');
+                return;
+            }
+            historyContainer.classList.remove('hidden');
+
+            const labels = history.map(h => h.date);
+            const data = history.map(h => h.completedCount);
+
+            if (habitHistoryChart) { habitHistoryChart.destroy(); }
+            const ctx = document.getElementById('habit-history-chart').getContext('2d');
+            habitHistoryChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Completed Sub-Habits',
+                        data: data,
+                        borderColor: '#8c734b',
+                        backgroundColor: 'rgba(140, 115, 75, 0.2)',
+                        tension: 0.3,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        legend: { display: false },
+                        title: {
+                            display: true,
+                            text: 'Daily Progress for ' + habits[habitId].title,
+                            font: { size: 18, weight: 'bold' }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            ticks: { stepSize: 1 }
+                        }
+                    }
+                }
+            });
+        };
+
+        const renderHabitDetail = (habitId) => {
+            const habitData = habits[habitId];
+            if (!habitData) return;
+
+            document.getElementById('habit-title').textContent = habitData.title;
+            const subHabitsList = document.getElementById('sub-habits-list');
+            subHabitsList.innerHTML = ''; // Clear previous content
+
+            habitData.subHabits.forEach((subHabit, index) => {
+                const isCompleted = habitData.completed[index];
+                const item = document.createElement('div');
+                item.className = 'card p-6 flex items-center justify-between';
+                item.innerHTML = `
+                    <label class="flex items-center text-lg cursor-pointer flex-grow">
+                        <input type="checkbox" class="mr-6 h-5 w-5 rounded-md text-blue-600 focus:ring-blue-500" data-index="${index}" ${isCompleted ? 'checked' : ''}>
+                        <span class="${isCompleted ? 'line-through text-gray-500' : ''}">${subHabit}</span>
+                    </label>
+                `;
+                subHabitsList.appendChild(item);
+            });
+
+            navigateTo('detail-view');
+            renderHabitHistoryGraph(habitId);
+
+            subHabitsList.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+                checkbox.addEventListener('change', (e) => {
+                    const index = e.target.dataset.index;
+                    habits[habitId].completed[index] = e.target.checked;
+                    saveHabits(auth.currentUser.uid);
+                    const span = e.target.closest('label').querySelector('span');
+                    if (e.target.checked) {
+                        span.classList.add('line-through', 'text-gray-500');
+                    } else {
+                        span.classList.remove('line-through', 'text-gray-500');
+                    }
+                });
+            });
+
+            document.getElementById('finish-habit-btn').onclick = () => {
+                const completedCount = habits[habitId].completed.filter(c => c).length;
+                const totalCount = habits[habitId].subHabits.length;
+                const percentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 100;
+                const todayFormatted = new Date().toLocaleDateString('en-US');
+                
+                // Update progress history for this specific habit
+                const todayEntry = habits[habitId].progressHistory.find(e => e.date === todayFormatted);
+                if (todayEntry) {
+                    todayEntry.completedCount = completedCount;
+                } else {
+                    habits[habitId].progressHistory.push({ date: todayFormatted, completedCount: completedCount });
+                }
+                
+                saveDailyPerformance();
+                saveHabits(auth.currentUser.uid);
+                renderHabitHistoryGraph(habitId);
+
+                if (percentage >= 80) {
+                    showFeedbackModal("Excellent Job!", "You're a habit champion! Keep up the amazing work and nothing can stop you.", true);
+                } else {
+                    showFeedbackModal("Room for Improvement!", "You've only completed " + completedCount + " out of " + totalCount + " tasks. Don't be a slacker. Get back to work!", false);
+                }
+            };
+        };
+        
+        const getWeekNumber = (date) => {
+            const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+            const dayNum = d.getUTCDay() || 7;
+            d.setUTCDate(d.getUTCDate() + 4 - dayNum);
+            const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+            return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
+        };
+
+        const saveDailyPerformance = () => {
+            let overallCompletedCount = 0;
+            let overallTotalCount = 0;
+            for (const key in habits) {
+                if (typeof habits[key] === 'object' && habits[key].subHabits) {
+                    const completedCount = habits[key].completed.filter(c => c).length;
+                    const totalCount = habits[key].subHabits.length;
+                    overallCompletedCount += completedCount;
+                    overallTotalCount += totalCount;
+                }
+            }
+            const overallPercentage = overallTotalCount > 0 ? (overallCompletedCount / overallTotalCount) * 100 : 0;
+            
+            const now = new Date();
+            const weekId = `${now.getFullYear()}-W${getWeekNumber(now)}`;
+            const monthId = `${now.getFullYear()}-${now.getMonth() + 1}`;
+
+            // Update weekly performance
+            const existingWeeklyIndex = habits.weeklyPerformance.findIndex(item => item.id === weekId);
+            if (existingWeeklyIndex > -1) {
+                habits.weeklyPerformance[existingWeeklyIndex].data = overallPercentage;
+            } else {
+                habits.weeklyPerformance.push({ id: weekId, data: overallPercentage });
+            }
+
+            // Update monthly performance
+            const existingMonthlyIndex = habits.monthlyPerformance.findIndex(item => item.id === monthId);
+            if (existingMonthlyIndex > -1) {
+                habits.monthlyPerformance[existingMonthlyIndex].data = overallPercentage;
+            } else {
+                habits.monthlyPerformance.push({ id: monthId, data: overallPercentage });
+            }
+            saveHabits(auth.currentUser.uid);
+        };
+
+        const predictFuturePerformance = async () => {
+            const predictionResultEl = document.getElementById('prediction-result');
+            const weeklyData = habits.weeklyPerformance;
+
+            if (weeklyData.length < 3) {
+                predictionResultEl.innerHTML = `<p class="text-gray-500">Not enough data to make a prediction. Track your habits for a few weeks to see a forecast here!</p>`;
+                return;
+            }
+
+            try {
+                // Prepare data for the model
+                const x = weeklyData.map((d, i) => i + 1); // Weeks as numbers
+                const y = weeklyData.map(d => d.data);    // Performance percentage
+
+                const xs = tf.tensor1d(x);
+                const ys = tf.tensor1d(y);
+
+                // Define a simple linear regression model
+                const model = tf.sequential();
+                model.add(tf.layers.dense({ units: 1, inputShape: [1] }));
+                model.compile({
+                    loss: 'meanSquaredError',
+                    optimizer: tf.train.adam(0.01)
+                });
+
+                // Train the model
+                await model.fit(xs, ys, { epochs: 100 });
+
+                // Make a prediction for the next week
+                const nextWeek = weeklyData.length + 1;
+                const predictionTensor = model.predict(tf.tensor2d([nextWeek], [1, 1]));
+                const prediction = predictionTensor.dataSync()[0];
+
+                const clampedPrediction = Math.max(0, Math.min(100, Math.round(prediction)));
+                
+                predictionResultEl.innerHTML = `<p class="text-2xl font-bold text-gray-800">${clampedPrediction}%</p><p class="mt-2 text-gray-600">is your predicted completion for next week!</p>`;
+
+                xs.dispose();
+                ys.dispose();
+                model.dispose();
+                predictionTensor.dispose();
+            } catch (e) {
+                console.error("AI Prediction failed:", e);
+                predictionResultEl.innerHTML = `<p class="text-red-500">AI prediction failed. Please try again.</p>`;
+            }
+        };
+        
+        const analyzeHabitDependencies = () => {
+            const insightsEl = document.getElementById('ai-insights-result');
+            const habitKeys = Object.keys(habits).filter(key => typeof habits[key] === 'object' && habits[key].subHabits);
+            const allInsights = [];
+
+            if (habitKeys.length < 2) {
+                insightsEl.innerHTML = `<p>Track a few more habits to see personalized insights.</p>`;
+                return;
+            }
+
+            try {
+                for (let i = 0; i < habitKeys.length; i++) {
+                    for (let j = i + 1; j < habitKeys.length; j++) {
+                        const habitA = habits[habitKeys[i]];
+                        const habitB = habits[habitKeys[j]];
+
+                        if (habitA.progressHistory.length === 0 || habitB.progressHistory.length === 0) continue;
+                        
+                        let positiveCorrelationCount = 0;
+                        let totalObservations = 0;
+
+                        // Create a map for quick lookup by date
+                        const historyMapB = new Map(habitB.progressHistory.map(entry => [entry.date, entry.completedCount]));
+
+                        habitA.progressHistory.forEach(entryA => {
+                            const completedA = entryA.completedCount;
+                            const totalA = habitA.subHabits.length;
+                            const percentageA = totalA > 0 ? (completedA / totalA) : 0;
+
+                            const completedB = historyMapB.get(entryA.date);
+                            if (completedB !== undefined) {
+                                const totalB = habitB.subHabits.length;
+                                const percentageB = totalB > 0 ? (completedB / totalB) : 0;
+                                
+                                if (percentageA > 0.8 && percentageB > 0.8) {
+                                    positiveCorrelationCount++;
+                                }
+                                totalObservations++;
+                            }
+                        });
+
+                        if (totalObservations > 5 && (positiveCorrelationCount / totalObservations) > 0.6) {
+                            allInsights.push(`Our AI suggests that on days you successfully complete your **${habitA.title}**, you also tend to succeed with **${habitB.title}**. Try doing these together!`);
+                        }
+                    }
+                }
+
+                if (allInsights.length > 0) {
+                    insightsEl.innerHTML = allInsights.map(insight => `<p class="mt-2">${insight}</p>`).join('');
+                } else {
+                    insightsEl.innerHTML = `<p>Keep tracking to unlock personalized insights!</p>`;
+                }
+            } catch (e) {
+                console.error("AI Insight analysis failed:", e);
+                insightsEl.innerHTML = `<p class="text-red-500">Failed to analyze insights. Please try again later.</p>`;
+            }
+        };
+
+        const renderSummary = async () => {
+            navigateTo('summary-view'); // Move navigation to the beginning
+
+            const summaryResults = document.getElementById('summary-results');
+            const summaryFeedback = document.getElementById('summary-feedback');
+            let overallCompletedCount = 0;
+            let overallTotalCount = 0;
+            let habitLabels = [];
+            let habitData = [];
+            let habitColors = [];
+
+            summaryResults.innerHTML = '';
+            
+            for (const key in habits) {
+                if (typeof habits[key] === 'object' && habits[key].subHabits) {
+                    const habitData = habits[key];
+                    const completedCount = habitData.completed.filter(c => c).length;
+                    const totalCount = habitData.subHabits.length;
+                    overallCompletedCount += completedCount;
+                    overallTotalCount += totalCount;
+
+                    const item = document.createElement('div');
+                    item.className = 'flex justify-between items-center py-4 border-b border-gray-200 last:border-b-0';
+                    item.innerHTML = `
+                        <span class="text-xl font-semibold">${habitData.title}</span>
+                        <span class="text-lg text-gray-600">${completedCount} / ${totalCount}</span>
+                    `;
+                    summaryResults.appendChild(item);
+
+                    habitLabels.push(habitData.title);
+                    habitData.push(totalCount > 0 ? (completedCount / totalCount) * 100 : 0);
+                    habitColors.push(totalCount > 0 ? '#3f51b5' : '#e9ecef');
+                }
+            }
+            
+            // Render habit completion bar chart
+            const ctxHabit = document.getElementById('habit-chart').getContext('2d');
+            if(habitChart) { habitChart.destroy(); }
+            habitChart = new Chart(ctxHabit, {
+                type: 'bar',
+                data: {
+                    labels: habitLabels,
+                    datasets: [{
+                        label: 'Today\'s Progress',
+                        data: habitData,
+                        backgroundColor: habitColors,
+                        borderColor: '#3f51b5',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: {
+                                callback: function(value) { return value + "%" }
+                            }
+                        }
+                    }
+                }
+            });
+
+            // Render weekly performance chart
+            if (weeklyChart) { weeklyChart.destroy(); }
+            const weeklyCtx = document.getElementById('weekly-chart').getContext('2d');
+            const weeklyLabels = habits.weeklyPerformance.map(item => item.id).slice(-8); // Show last 8 weeks
+            const weeklyData = habits.weeklyPerformance.map(item => item.data).slice(-8);
+            weeklyChart = new Chart(weeklyCtx, {
+                type: 'line',
+                data: {
+                    labels: weeklyLabels,
+                    datasets: [{
+                        label: 'Avg. Weekly Performance',
+                        data: weeklyData,
+                        backgroundColor: 'rgba(63, 81, 181, 0.2)',
+                        borderColor: '#3f51b5',
+                        borderWidth: 2,
+                        tension: 0.3,
+                        fill: true,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: { callback: (value) => value + '%' }
+                        }
+                    }
+                }
+            });
+
+            // Render monthly performance chart
+            if (monthlyChart) { monthlyChart.destroy(); }
+            const monthlyCtx = document.getElementById('monthly-chart').getContext('2d');
+            const monthlyLabels = habits.monthlyPerformance.map(item => item.id).slice(-6); // Show last 6 months
+            const monthlyData = habits.monthlyPerformance.map(item => item.data).slice(-6);
+            monthlyChart = new Chart(monthlyCtx, {
+                type: 'bar',
+                data: {
+                    labels: monthlyLabels,
+                    datasets: [{
+                        label: 'Avg. Monthly Performance',
+                        data: monthlyData,
+                        backgroundColor: '#3f51b5',
+                        borderColor: '#3f51b5',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: { legend: { display: false } },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100,
+                            ticks: { callback: (value) => value + '%' }
+                        }
+                    }
+                }
+            });
+
+            const overallPercentage = overallTotalCount > 0 ? (overallCompletedCount / overallTotalCount) * 100 : 100;
+            let feedbackText = '';
+
+            if (overallPercentage >= 80) {
+                feedbackText = `<p class="text-green-600">You are on fire! You've mastered your habits and are on the path to success!</p>`;
+            } else if (overallPercentage >= 50) {
+                feedbackText = `<p class="text-yellow-600">You're making good progress, but there's still a long way to go. Don't give up!</p>`;
+            } else {
+                feedbackText = `<p class="text-red-600">C'mon, get it together! Your habits are calling. You can do so much better!</p>`;
+            }
+            summaryFeedback.innerHTML = feedbackText;
+            
+            await predictFuturePerformance();
+            analyzeHabitDependencies();
+
+            
+        };
+
+        const renderDiary = () => {
+            const today = new Date();
+            const todayFormatted = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+            document.getElementById('current-date').textContent = todayFormatted;
+
+            const diaryEntryInput = document.getElementById('diary-entry-input');
+            const existingEntry = habits.diaryEntries.find(entry => entry.date === todayFormatted);
+            diaryEntryInput.value = existingEntry ? existingEntry.content : '';
+            
+            const diaryEntriesList = document.getElementById('diary-entries-list');
+            diaryEntriesList.innerHTML = '';
+            habits.diaryEntries.sort((a, b) => new Date(b.date) - new Date(a.date)).forEach(entry => {
+                const entryCard = document.createElement('div');
+                entryCard.className = 'card p-4';
+                entryCard.innerHTML = `
+                    <p class="font-bold text-gray-700">${entry.date}</p>
+                    <p class="mt-2 text-gray-600">${entry.content}</p>
+                `;
+                diaryEntriesList.appendChild(entryCard);
+            });
+
+            navigateTo('diary-view');
+        };
+
+        const showFeedbackModal = (title, message, isPraise) => {
+            modalTitle.textContent = title;
+            modalMessage.textContent = message;
+            feedbackModal.classList.remove('hidden');
+        };
+
+        const showSettingsModal = () => {
+            document.getElementById('photo-url').value = habits.photoUrl;
+            document.getElementById('motivation-input').value = habits.motivationLine || '';
+            document.getElementById('food-habits').value = habits.food.subHabits.join('\n');
+            document.getElementById('physical-habits').value = habits.physical.subHabits.join('\n');
+            document.getElementById('selfcare-habits').value = habits.selfcare.subHabits.join('\n');
+            document.getElementById('hygiene-habits').value = habits.hygiene.subHabits.join('\n');
+            document.getElementById('sleep-habits').value = habits.sleep.subHabits.join('\n');
+            document.getElementById('water-habits').value = habits.water.subHabits.join('\n');
+
+            settingsModal.classList.remove('hidden');
+        };
+
+        const saveSettings = () => {
+            habits.photoUrl = document.getElementById('photo-url').value || defaultHabits.photoUrl;
+            habits.motivationLine = document.getElementById('motivation-input').value.trim() || '';
+
+            const parseSubHabits = (input, key) => {
+                const newSubHabits = input.split('\n').map(s => s.trim()).filter(s => s.length > 0);
+                const newCompleted = new Array(newSubHabits.length).fill(false);
+                habits[key].subHabits.forEach((oldSub, index) => {
+                    const newIndex = newSubHabits.indexOf(oldSub);
+                    if (newIndex !== -1) {
+                        newCompleted[newIndex] = habits[key].completed[index];
+                    }
+                });
+                habits[key].subHabits = newSubHabits;
+                habits[key].completed = newCompleted;
+            };
+
+            parseSubHabits(document.getElementById('food-habits').value, 'food');
+            parseSubHabits(document.getElementById('physical-habits').value, 'physical');
+            parseSubHabits(document.getElementById('selfcare-habits').value, 'selfcare');
+            parseSubHabits(document.getElementById('hygiene-habits').value, 'hygiene');
+            parseSubHabits(document.getElementById('sleep-habits').value, 'sleep');
+            parseSubHabits(document.getElementById('water-habits').value, 'water');
+            
+            saveHabits(auth.currentUser.uid);
+            updateUIFromHabits();
+            settingsModal.classList.add('hidden');
+        };
+
+        // 💡 NEW: Event listeners for auth
+        document.getElementById('go-to-register-btn').addEventListener('click', () => navigateTo('register-view'));
+        document.getElementById('go-to-login-btn').addEventListener('click', () => navigateTo('login-view'));
+
+        document.getElementById('login-btn').addEventListener('click', async () => {
+            const email = loginEmailInput.value;
+            const password = loginPasswordInput.value;
+            loginErrorEl.textContent = '';
+            try {
+                await auth.signInWithEmailAndPassword(email, password);
+            } catch (error) {
+                loginErrorEl.textContent = error.message;
+                loginErrorEl.classList.remove('hidden');
+            }
+        });
+
+        document.getElementById('register-btn').addEventListener('click', async () => {
+            const email = registerEmailInput.value;
+            const password = registerPasswordInput.value;
+            registerErrorEl.textContent = '';
+            try {
+                await auth.createUserWithEmailAndPassword(email, password);
+                // User is automatically signed in after registration, the auth state listener will handle navigation
+            } catch (error) {
+                registerErrorEl.textContent = error.message;
+                registerErrorEl.classList.remove('hidden');
+            }
+        });
+
+        document.getElementById('signout-btn').addEventListener('click', async () => {
+            try {
+                await auth.signOut();
+            } catch (error) {
+                console.error("Sign out error:", error);
+            }
+        });
+
+        // 💡 NEW: Auth State Listener
+        auth.onAuthStateChanged(user => {
+            if (user) {
+                // User is signed in. Load their data and show the home view.
+                loadHabits(user.uid);
+                updateUIFromHabits();
+                navigateTo('home-view');
+            } else {
+                // User is signed out. Show the login view.
+                navigateTo('login-view');
+            }
+        });
+
+        // Existing Event listeners
+        document.querySelectorAll('.habits-container .card').forEach(card => {
+            card.addEventListener('click', () => {
+                const habitId = card.dataset.habit;
+                renderHabitDetail(habitId);
+            });
+        });
+        document.getElementById('back-to-home').addEventListener('click', () => navigateTo('home-view'));
+        document.getElementById('back-from-summary').addEventListener('click', () => navigateTo('home-view'));
+        document.getElementById('back-from-diary').addEventListener('click', () => navigateTo('home-view'));
+        document.getElementById('modal-close').addEventListener('click', () => feedbackModal.classList.add('hidden'));
+        document.getElementById('show-summary-btn').addEventListener('click', renderSummary);
+        document.getElementById('show-settings-btn').addEventListener('click', showSettingsModal);
+        document.getElementById('show-diary-btn').addEventListener('click', renderDiary);
+        document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
+        document.getElementById('close-settings-btn').addEventListener('click', () => settingsModal.classList.add('hidden'));
+        document.getElementById('save-diary-entry').addEventListener('click', () => {
+            const today = new Date();
+            const todayFormatted = today.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+            const entryContent = document.getElementById('diary-entry-input').value.trim();
+
+            const existingEntryIndex = habits.diaryEntries.findIndex(entry => entry.date === todayFormatted);
+            if (existingEntryIndex > -1) {
+                habits.diaryEntries[existingEntryIndex].content = entryContent;
+            } else {
+                habits.diaryEntries.push({ date: todayFormatted, content: entryContent });
+            }
+            saveHabits(auth.currentUser.uid);
+            renderDiary();
+        });
+
+    </script>
+</body>
+</html>
