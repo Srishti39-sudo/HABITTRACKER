@@ -389,7 +389,6 @@
     </div>
 
     <script>
-        // 💡 NEW: Firebase configuration
         const firebaseConfig = {
             apiKey: "AIzaSyCn79kCYZrMtP2S8LZwgJ9mYcLDkZ55rWo", 
             authDomain: "habit-tracker-3cd09.firebaseapp.com",
@@ -402,7 +401,6 @@
         firebase.initializeApp(firebaseConfig);
         const auth = firebase.auth();
 
-        // 💡 NEW: UI elements for auth views
         const loginView = document.getElementById('login-view');
         const registerView = document.getElementById('register-view');
         const loginEmailInput = document.getElementById('login-email');
@@ -412,7 +410,6 @@
         const loginErrorEl = document.getElementById('login-error');
         const registerErrorEl = document.getElementById('register-error');
 
-        // Existing UI elements
         const homeView = document.getElementById('home-view');
         const detailView = document.getElementById('detail-view');
         const summaryView = document.getElementById('summary-view');
@@ -425,6 +422,8 @@
         let weeklyChart = null;
         let monthlyChart = null;
         let habitHistoryChart = null;
+        
+        let currentHabitId = null; 
 
         const motivatingLines = [
             "Your only limit is you.",
@@ -575,6 +574,9 @@
         const renderHabitDetail = (habitId) => {
             const habitData = habits[habitId];
             if (!habitData) return;
+            
+            // Set the global variable
+            currentHabitId = habitId; 
 
             document.getElementById('habit-title').textContent = habitData.title;
             const subHabitsList = document.getElementById('sub-habits-list');
@@ -599,7 +601,7 @@
             subHabitsList.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
                 checkbox.addEventListener('change', (e) => {
                     const index = e.target.dataset.index;
-                    habits[habitId].completed[index] = e.target.checked;
+                    habits[currentHabitId].completed[index] = e.target.checked;
                     saveHabits(auth.currentUser.uid);
                     const span = e.target.closest('label').querySelector('span');
                     if (e.target.checked) {
@@ -609,31 +611,6 @@
                     }
                 });
             });
-
-            document.getElementById('finish-habit-btn').onclick = () => {
-                const completedCount = habits[habitId].completed.filter(c => c).length;
-                const totalCount = habits[habitId].subHabits.length;
-                const percentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 100;
-                const todayFormatted = new Date().toLocaleDateString('en-US');
-                
-                // Update progress history for this specific habit
-                const todayEntry = habits[habitId].progressHistory.find(e => e.date === todayFormatted);
-                if (todayEntry) {
-                    todayEntry.completedCount = completedCount;
-                } else {
-                    habits[habitId].progressHistory.push({ date: todayFormatted, completedCount: completedCount });
-                }
-                
-                saveDailyPerformance();
-                saveHabits(auth.currentUser.uid);
-                renderHabitHistoryGraph(habitId);
-
-                if (percentage >= 80) {
-                    showFeedbackModal("Excellent Job!", "You're a habit champion! Keep up the amazing work and nothing can stop you.", true);
-                } else {
-                    showFeedbackModal("Room for Improvement!", "You've only completed " + completedCount + " out of " + totalCount + " tasks. Don't be a slacker. Get back to work!", false);
-                }
-            };
         };
         
         const getWeekNumber = (date) => {
@@ -643,7 +620,7 @@
             const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
             return Math.ceil((((d - yearStart) / 86400000) + 1) / 7);
         };
-
+        
         const saveDailyPerformance = () => {
             let overallCompletedCount = 0;
             let overallTotalCount = 0;
@@ -661,23 +638,18 @@
             const weekId = `${now.getFullYear()}-W${getWeekNumber(now)}`;
             const monthId = `${now.getFullYear()}-${now.getMonth() + 1}`;
 
-            // Update weekly performance
-            const existingWeeklyIndex = habits.weeklyPerformance.findIndex(item => item.id === weekId);
-            if (existingWeeklyIndex > -1) {
-                habits.weeklyPerformance[existingWeeklyIndex].data = overallPercentage;
-            } else {
-                habits.weeklyPerformance.push({ id: weekId, data: overallPercentage });
-            }
-
-            // Update monthly performance
-            const existingMonthlyIndex = habits.monthlyPerformance.findIndex(item => item.id === monthId);
-            if (existingMonthlyIndex > -1) {
-                habits.monthlyPerformance[existingMonthlyIndex].data = overallPercentage;
-            } else {
-                habits.monthlyPerformance.push({ id: monthId, data: overallPercentage });
-            }
-            saveHabits(auth.currentUser.uid);
+            const updatePerformanceHistory = (history, id, data) => {
+                const existingIndex = history.findIndex(item => item.id === id);
+                if (existingIndex > -1) {
+                    history[existingIndex].data = data;
+                } else {
+                    history.push({ id, data });
+                }
+            };
+            updatePerformanceHistory(habits.weeklyPerformance, weekId, overallPercentage);
+            updatePerformanceHistory(habits.monthlyPerformance, monthId, overallPercentage);
         };
+        
 
         const predictFuturePerformance = async () => {
             const predictionResultEl = document.getElementById('prediction-result');
@@ -785,10 +757,12 @@
         };
 
         const renderSummary = async () => {
-            navigateTo('summary-view'); // Move navigation to the beginning
+            navigateTo('summary-view'); 
 
             const summaryResults = document.getElementById('summary-results');
             const summaryFeedback = document.getElementById('summary-feedback');
+            
+            // Calculate overall progress here
             let overallCompletedCount = 0;
             let overallTotalCount = 0;
             let habitLabels = [];
@@ -799,21 +773,21 @@
             
             for (const key in habits) {
                 if (typeof habits[key] === 'object' && habits[key].subHabits) {
-                    const habitData = habits[key];
-                    const completedCount = habitData.completed.filter(c => c).length;
-                    const totalCount = habitData.subHabits.length;
+                    const habitDataItem = habits[key];
+                    const completedCount = habitDataItem.completed.filter(c => c).length;
+                    const totalCount = habitDataItem.subHabits.length;
                     overallCompletedCount += completedCount;
                     overallTotalCount += totalCount;
 
                     const item = document.createElement('div');
                     item.className = 'flex justify-between items-center py-4 border-b border-gray-200 last:border-b-0';
                     item.innerHTML = `
-                        <span class="text-xl font-semibold">${habitData.title}</span>
+                        <span class="text-xl font-semibold">${habitDataItem.title}</span>
                         <span class="text-lg text-gray-600">${completedCount} / ${totalCount}</span>
                     `;
                     summaryResults.appendChild(item);
 
-                    habitLabels.push(habitData.title);
+                    habitLabels.push(habitDataItem.title);
                     habitData.push(totalCount > 0 ? (completedCount / totalCount) * 100 : 0);
                     habitColors.push(totalCount > 0 ? '#3f51b5' : '#e9ecef');
                 }
@@ -851,7 +825,7 @@
             // Render weekly performance chart
             if (weeklyChart) { weeklyChart.destroy(); }
             const weeklyCtx = document.getElementById('weekly-chart').getContext('2d');
-            const weeklyLabels = habits.weeklyPerformance.map(item => item.id).slice(-8); // Show last 8 weeks
+            const weeklyLabels = habits.weeklyPerformance.map(item => item.id).slice(-8); 
             const weeklyData = habits.weeklyPerformance.map(item => item.data).slice(-8);
             weeklyChart = new Chart(weeklyCtx, {
                 type: 'line',
@@ -883,7 +857,7 @@
             // Render monthly performance chart
             if (monthlyChart) { monthlyChart.destroy(); }
             const monthlyCtx = document.getElementById('monthly-chart').getContext('2d');
-            const monthlyLabels = habits.monthlyPerformance.map(item => item.id).slice(-6); // Show last 6 months
+            const monthlyLabels = habits.monthlyPerformance.map(item => item.id).slice(-6); 
             const monthlyData = habits.monthlyPerformance.map(item => item.data).slice(-6);
             monthlyChart = new Chart(monthlyCtx, {
                 type: 'bar',
@@ -1022,7 +996,6 @@
             registerErrorEl.textContent = '';
             try {
                 await auth.createUserWithEmailAndPassword(email, password);
-                // User is automatically signed in after registration, the auth state listener will handle navigation
             } catch (error) {
                 registerErrorEl.textContent = error.message;
                 registerErrorEl.classList.remove('hidden');
@@ -1040,20 +1013,53 @@
         // 💡 NEW: Auth State Listener
         auth.onAuthStateChanged(user => {
             if (user) {
-                // User is signed in. Load their data and show the home view.
                 loadHabits(user.uid);
                 updateUIFromHabits();
                 navigateTo('home-view');
             } else {
-                // User is signed out. Show the login view.
                 navigateTo('login-view');
             }
         });
 
-        // Existing Event listeners
+        // 💡 NEW: Event listener for the "Finish This Habit" button
+        document.getElementById('finish-habit-btn').addEventListener('click', () => {
+            if (!currentHabitId) {
+                console.error("No habit ID found! Cannot save progress.");
+                return;
+            }
+            const habitData = habits[currentHabitId];
+            const completedCount = habitData.completed.filter(c => c).length;
+            const totalCount = habitData.subHabits.length;
+            const percentage = totalCount > 0 ? (completedCount / totalCount) * 100 : 100;
+            const todayFormatted = new Date().toLocaleDateString('en-US');
+
+            const todayEntry = habitData.progressHistory.find(entry => entry.date === todayFormatted);
+            if (todayEntry) {
+                todayEntry.completedCount = completedCount;
+            } else {
+                habitData.progressHistory.push({ date: todayFormatted, completedCount: completedCount });
+            }
+
+            saveHabits(auth.currentUser.uid); // Save to local storage after updating
+            renderHabitHistoryGraph(currentHabitId); // Update the graph for the current habit
+
+            if (percentage >= 80) {
+                showFeedbackModal("Excellent Job!", "You're a habit champion! Keep up the amazing work and nothing can stop you.", true);
+            } else {
+                showFeedbackModal("Room for Improvement!", "You've only completed " + completedCount + " out of " + totalCount + " tasks. Don't be a slacker. Get back to work!", false);
+            }
+        });
+        
+        // Final Fix: The "See Your Overall Results" button will now calculate everything correctly
+        document.getElementById('show-summary-btn').addEventListener('click', () => {
+            saveDailyPerformance();
+            renderSummary();
+        });
+
+        // Remaining Event listeners
         document.querySelectorAll('.habits-container .card').forEach(card => {
-            card.addEventListener('click', () => {
-                const habitId = card.dataset.habit;
+            card.addEventListener('click', (event) => {
+                const habitId = event.currentTarget.dataset.habit;
                 renderHabitDetail(habitId);
             });
         });
@@ -1061,7 +1067,6 @@
         document.getElementById('back-from-summary').addEventListener('click', () => navigateTo('home-view'));
         document.getElementById('back-from-diary').addEventListener('click', () => navigateTo('home-view'));
         document.getElementById('modal-close').addEventListener('click', () => feedbackModal.classList.add('hidden'));
-        document.getElementById('show-summary-btn').addEventListener('click', renderSummary);
         document.getElementById('show-settings-btn').addEventListener('click', showSettingsModal);
         document.getElementById('show-diary-btn').addEventListener('click', renderDiary);
         document.getElementById('save-settings-btn').addEventListener('click', saveSettings);
@@ -1080,7 +1085,10 @@
             saveHabits(auth.currentUser.uid);
             renderDiary();
         });
-
     </script>
 </body>
 </html>
+        
+
+       
+            
